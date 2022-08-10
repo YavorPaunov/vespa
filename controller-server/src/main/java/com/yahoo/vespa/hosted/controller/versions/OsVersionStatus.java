@@ -61,16 +61,16 @@ public record OsVersionStatus(Map<OsVersion, List<NodeVersion>> versions) {
         for (var application : SystemApplication.all()) {
             for (var zone : zonesToUpgrade(controller)) {
                 if (!application.shouldUpgradeOs()) continue;
-                Version targetOsVersion = controller.serviceRegistry().configServer().nodeRepository()
-                                                    .targetVersionsOf(zone.getVirtualId())
-                                                    .osVersion(application.nodeType())
-                                                    .orElse(Version.emptyVersion);
+                Optional<Version> targetOsVersion = controller.serviceRegistry().configServer().nodeRepository()
+                                                              .targetVersionsOf(zone.getVirtualId())
+                                                              .osVersion(application.nodeType());
 
                 for (var node : controller.serviceRegistry().configServer().nodeRepository().list(zone.getVirtualId(), NodeFilter.all().applications(application.id()))) {
                     if (!OsUpgrader.canUpgrade(node, true)) continue;
                     Optional<Instant> suspendedAt = node.suspendedSince();
                     NodeVersion nodeVersion = new NodeVersion(node.hostname(), zone.getVirtualId(), node.currentOsVersion(),
-                                                              targetOsVersion, suspendedAt);
+                                                              targetOsVersion.orElse(node.currentOsVersion()),
+                                                              suspendedAt);
                     OsVersion osVersion = new OsVersion(nodeVersion.currentVersion(), zone.getCloudName());
                     osVersions.computeIfAbsent(osVersion, (k) -> new ArrayList<>())
                               .add(nodeVersion);
