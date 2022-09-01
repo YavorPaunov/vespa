@@ -58,6 +58,7 @@ public class ApplicationBundleLoader {
         osgi.allowDuplicateBundles(bundlesToUninstall);
 
         bundlesFromNewGeneration = installBundles(newFileReferences);
+        log.warning("New bundles from latest generation: " + bundlesFromNewGeneration);
         BundleStarter.startBundles(activeBundles.values());
         log.info(installedBundlesMessage());
 
@@ -70,6 +71,8 @@ public class ApplicationBundleLoader {
      * be done by the Deconstructor as they may still be needed by components from the failed gen.
      */
     public synchronized Collection<Bundle> revertToPreviousGeneration() {
+        log.warning("Reverting to previous generation with bundles: " + obsoleteBundles);
+        log.warning("Bundles from latest generation will be removed: " + bundlesFromNewGeneration);
         activeBundles.putAll(obsoleteBundles);
         bundlesFromNewGeneration.forEach(activeBundles::remove);
         Collection<Bundle> ret = bundlesFromNewGeneration.values();

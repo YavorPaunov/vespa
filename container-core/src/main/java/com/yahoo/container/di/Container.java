@@ -81,6 +81,7 @@ public class Container {
                         newGraph.generation()), e);
 
                 Collection<Bundle> newBundlesFromFailedGen = osgi.revertApplicationBundles();
+                log.warning("GVL bundles from failed gen: " + newBundlesFromFailedGen);
                 deconstructFailedGraph(oldGraph, newGraph, newBundlesFromFailedGen);
                 throw e;
             }
