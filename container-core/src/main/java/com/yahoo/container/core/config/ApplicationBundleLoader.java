@@ -58,7 +58,7 @@ public class ApplicationBundleLoader {
         osgi.allowDuplicateBundles(bundlesToUninstall);
 
         bundlesFromNewGeneration = installBundles(newFileReferences);
-        log.warning("New bundles from latest generation: " + bundlesFromNewGeneration);
+        log.warning("New bundles for generation : " + bundlesFromNewGeneration);
         BundleStarter.startBundles(activeBundles.values());
         log.info(installedBundlesMessage());
 
