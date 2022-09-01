@@ -10,6 +10,7 @@ import com.yahoo.container.di.componentgraph.core.ComponentGraphTest.SimpleCompo
 import com.yahoo.container.di.componentgraph.core.ComponentNode.ComponentConstructorException;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.osgi.framework.Bundle;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -229,6 +230,48 @@ public class ContainerTest extends ContainerTestBase {
         // bundle-1 is kept, bundle-2 has been uninstalled
         assertEquals(1, osgi.getBundles().length);
         assertEquals("bundle-1", osgi.getBundles()[0].getSymbolicName());
+    }
+
+    @Test
+    void bundle_is_still_current_after_failed_reconfig_with_unchanged_bundles() {
+        ComponentEntry simpleComponentEntry = new ComponentEntry("simpleComponent", SimpleComponent.class);
+        ComponentEntry throwingComponentEntry = new ComponentEntry("throwingComponent", ComponentThrowingExceptionInConstructor.class);
+
+        writeBootstrapConfigsWithBundles(List.of("bundle-1"), List.of(simpleComponentEntry));
+        Container container = newContainer(dirConfigSource);
+        ComponentGraph currentGraph = getNewComponentGraph(container);
+
+        // bundle-1 is installed
+        assertEquals(1, osgi.getBundles().length);
+        var bundle1 = osgi.getBundles()[0];
+        assertEquals("bundle-1", osgi.getBundles()[0].getSymbolicName());
+
+
+        writeBootstrapConfigsWithBundles(List.of("bundle-1"), List.of(throwingComponentEntry));
+        container.reloadConfig(2);
+        try {
+            currentGraph = getNewComponentGraph(container, currentGraph);
+            fail("Expected exception");
+        } catch (ComponentConstructorException ignored) {
+            // Expected, do nothing
+        }
+        assertEquals(1, currentGraph.generation());
+
+        // bundle-1 is kept and current
+        assertEquals(1, osgi.getBundles().length);
+        assertEquals("bundle-1", osgi.getBundles()[0].getSymbolicName());
+        assertEquals(1, osgi.getCurrentBundles().size());
+        assertSame(bundle1, osgi.getCurrentBundles().get(0));
+
+        // Reconfig with same bundles and components as the initial generation should succeed.
+        writeBootstrapConfigsWithBundles(List.of("bundle-1"), List.of(simpleComponentEntry));
+        container.reloadConfig(3);
+        currentGraph = getNewComponentGraph(container, currentGraph);
+        assertEquals(3, currentGraph.generation());
+
+        // bundle-1 is still installed and current
+        assertEquals(1, osgi.getBundles().length);
+        assertSame(bundle1, osgi.getCurrentBundles().get(0));
     }
 
     @Test
