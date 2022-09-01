@@ -149,12 +149,16 @@ private:
     static thread_local ThreadState *_thread_state;
 
     static void init_thread_state() noexcept;
+#ifdef __APPLE__
+    static ThreadState &thread_state() noexcept;
+#else
     static ThreadState &thread_state() noexcept {
         if (__builtin_expect((_thread_state == nullptr), false)) {
             init_thread_state();
         }
         return *_thread_state;
     }
+#endif
 
     std::mutex _lock;
     std::vector<ThreadState::UP> _state_list;
