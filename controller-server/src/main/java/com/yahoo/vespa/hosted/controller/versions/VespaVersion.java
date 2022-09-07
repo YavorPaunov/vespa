@@ -33,7 +33,7 @@ public record VespaVersion(Version version,
         int thisMajorVersion = statistics.version().getMajor();
         InstanceList all = InstanceList.from(controller.jobController().deploymentStatuses(ApplicationList.from(controller.applications().asList())
                                                                                                           .withProductionDeployment()))
-                                       .allowingMajorVersion(thisMajorVersion);
+                                       .allowingMajorVersion(thisMajorVersion, controller.applications()::majorVersionStatus);
         // 'production on this': All production deployment jobs upgrading to this version have completed without failure
         InstanceList productionOnThis = all.matching(instance -> statistics.productionSuccesses().stream().anyMatch(run -> run.id().application().equals(instance)))
                                            .not().failingUpgrade()

@@ -271,6 +271,20 @@ public class PermanentFlags {
             "Takes effect immediately",
             APPLICATION_ID);
 
+    public static final UnboundStringFlag MAJOR_VERSION_STATUS = defineStringFlag(
+            "major-version-status",
+            "STABLE",
+            """
+            See MajorVersionStatus.java. A major version can be:
+            CURRENT:    Only a target major for applications who opt in.
+            STABLE:     The newest such major is the default target for new applications.
+            OUTDATED:   Only applications already on this major can deploy to it.
+            LEGACY:     Applications on this major will be upgraded, unless it is specified in deployment spec.
+            """,
+            "Takes effect immediately",
+            List.of("CURRENT", "STABLE", "OUTDATED", "LEGACY")::contains,
+            VESPA_VERSION);
+
     public static final UnboundStringFlag ADMIN_CLUSTER_NODE_ARCHITECTURE = defineStringFlag(
             "admin-cluster-node-architecture", "x86_64",
             "Architecture to use for node resources. Used when implicitly creating admin clusters " +

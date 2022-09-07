@@ -26,6 +26,7 @@ import com.yahoo.vespa.hosted.controller.api.integration.deployment.RevisionId;
 import com.yahoo.vespa.hosted.controller.api.integration.zone.ZoneRegistry;
 import com.yahoo.vespa.hosted.controller.application.Change;
 import com.yahoo.vespa.hosted.controller.application.Deployment;
+import com.yahoo.vespa.hosted.controller.versions.MajorVersionStatus;
 import com.yahoo.vespa.hosted.controller.versions.VersionStatus;
 import com.yahoo.vespa.hosted.controller.versions.VespaVersion;
 
@@ -82,18 +83,22 @@ public class DeploymentStatus {
     private final VersionStatus versionStatus;
     private final Version systemVersion;
     private final Function<InstanceName, VersionCompatibility> versionCompatibility;
+
+    private final Function<Version, MajorVersionStatus> majorVersionStatus;
     private final ZoneRegistry zones;
     private final Instant now;
     private final Map<JobId, StepStatus> jobSteps;
     private final List<StepStatus> allSteps;
 
     public DeploymentStatus(Application application, Function<JobId, JobStatus> allJobs, ZoneRegistry zones, VersionStatus versionStatus,
-                            Version systemVersion, Function<InstanceName, VersionCompatibility> versionCompatibility, Instant now) {
+                            Version systemVersion, Function<InstanceName, VersionCompatibility> versionCompatibility,
+                            Function<Version, MajorVersionStatus> majorVersionStatus, Instant now) {
         this.application = requireNonNull(application);
         this.zones = zones;
         this.versionStatus = requireNonNull(versionStatus);
         this.systemVersion = requireNonNull(systemVersion);
         this.versionCompatibility = versionCompatibility;
+        this.majorVersionStatus = majorVersionStatus;
         this.now = requireNonNull(now);
         List<StepStatus> allSteps = new ArrayList<>();
         Map<JobId, JobStatus> jobs = new HashMap<>();
@@ -188,7 +193,10 @@ public class DeploymentStatus {
         if (   application.productionDeployments().isEmpty() // TODO: replace with adding this for test jobs when needed
             || application.productionDeployments().getOrDefault(instance, List.of()).stream()
                           .anyMatch(deployment -> ! compatibleWithCompileVersion.test(deployment.version()))) {
-            for (Version platform : targetsForPolicy(versionStatus, systemVersion, application.deploymentSpec().requireInstance(instance).upgradePolicy()))
+            for (Version platform : targetsForPolicy(versionStatus,
+                                                     systemVersion,
+                                                     application.deploymentSpec().requireInstance(instance).upgradePolicy(),
+                                                     majorVersionStatus))
                 if (compatibleWithCompileVersion.test(platform))
                     return change.withoutPin().with(platform);
         }
@@ -196,16 +204,19 @@ public class DeploymentStatus {
     }
 
     /** Returns target versions for given confidence, by descending version number. */
-    public static List<Version> targetsForPolicy(VersionStatus versions, Version systemVersion, DeploymentSpec.UpgradePolicy policy) {
+    public static List<Version> targetsForPolicy(VersionStatus versions, Version systemVersion, DeploymentSpec.UpgradePolicy policy,
+                                                 Function<Version, MajorVersionStatus> majorVersionStatus) {
         if (policy == DeploymentSpec.UpgradePolicy.canary)
             return List.of(systemVersion);
 
         VespaVersion.Confidence target = policy == DeploymentSpec.UpgradePolicy.defaultPolicy ? VespaVersion.Confidence.normal : VespaVersion.Confidence.high;
-        return versions.deployableVersions().stream()
-                       .filter(version -> version.confidence().equalOrHigherThan(target))
-                       .map(VespaVersion::versionNumber)
-                       .sorted(reverseOrder())
-                       .collect(Collectors.toList());
+        List<Version> targets = new ArrayList<>();
+        for (VespaVersion version : reversed(versions.deployableVersions()))
+            if (   version.confidence().equalOrHigherThan(target)
+                && majorVersionStatus.apply(version.versionNumber()) == MajorVersionStatus.STABLE)
+                targets.add(version.versionNumber());
+
+        return targets;
     }
 
 
@@ -288,7 +299,8 @@ public class DeploymentStatus {
                                                  systemVersion,
                                                  application.deploymentSpec().instance(instance)
                                                             .map(DeploymentInstanceSpec::upgradePolicy)
-                                                            .orElse(UpgradePolicy.defaultPolicy));
+                                                            .orElse(UpgradePolicy.defaultPolicy),
+                                                 majorVersionStatus);
 
         // Prefer fallback with proper confidence.
         for (Version target : targets)

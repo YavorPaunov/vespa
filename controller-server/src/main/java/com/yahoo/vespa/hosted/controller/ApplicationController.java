@@ -23,6 +23,7 @@ import com.yahoo.vespa.athenz.api.AthenzPrincipal;
 import com.yahoo.vespa.athenz.api.AthenzService;
 import com.yahoo.vespa.athenz.api.AthenzUser;
 import com.yahoo.vespa.flags.FetchVector;
+import com.yahoo.vespa.flags.FetchVector.Dimension;
 import com.yahoo.vespa.flags.FlagSource;
 import com.yahoo.vespa.flags.ListFlag;
 import com.yahoo.vespa.flags.PermanentFlags;
@@ -72,6 +73,7 @@ import com.yahoo.vespa.hosted.controller.support.access.SupportAccessGrant;
 import com.yahoo.vespa.hosted.controller.tenant.AthenzTenant;
 import com.yahoo.vespa.hosted.controller.tenant.CloudTenant;
 import com.yahoo.vespa.hosted.controller.tenant.Tenant;
+import com.yahoo.vespa.hosted.controller.versions.MajorVersionStatus;
 import com.yahoo.vespa.hosted.controller.versions.VersionStatus;
 import com.yahoo.vespa.hosted.controller.versions.VespaVersion;
 import com.yahoo.vespa.hosted.controller.versions.VespaVersion.Confidence;
@@ -138,6 +140,8 @@ public class ApplicationController {
     private final EndpointCertificates endpointCertificates;
     private final StringFlag dockerImageRepoFlag;
     private final ListFlag<String> incompatibleVersions;
+
+    private final StringFlag majorVersionStatuses;
     private final BillingController billingController;
 
     ApplicationController(Controller controller, CuratorDb curator, AccessControl accessControl, Clock clock,
@@ -153,6 +157,7 @@ public class ApplicationController {
         applicationStore = controller.serviceRegistry().applicationStore();
         dockerImageRepoFlag = PermanentFlags.DOCKER_IMAGE_REPO.bindTo(flagSource);
         incompatibleVersions = PermanentFlags.INCOMPATIBLE_VERSIONS.bindTo(flagSource);
+        majorVersionStatuses = PermanentFlags.MAJOR_VERSION_STATUS.bindTo(flagSource);
         deploymentTrigger = new DeploymentTrigger(controller, clock);
         applicationPackageValidator = new ApplicationPackageValidator(controller);
         endpointCertificates = new EndpointCertificates(controller,
@@ -864,6 +869,10 @@ public class ApplicationController {
 
     public VersionCompatibility versionCompatibility(ApplicationId id) {
         return VersionCompatibility.fromVersionList(incompatibleVersions.with(APPLICATION_ID, id.serializedForm()).value());
+    }
+
+    public MajorVersionStatus majorVersionStatus(Version version) {
+        return MajorVersionStatus.from(majorVersionStatuses.with(Dimension.VESPA_VERSION, version.toFullString()).value());
     }
 
     /**

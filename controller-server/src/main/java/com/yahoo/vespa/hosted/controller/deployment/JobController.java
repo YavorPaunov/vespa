@@ -36,6 +36,7 @@ import com.yahoo.vespa.hosted.controller.notification.Notification.Type;
 import com.yahoo.vespa.hosted.controller.notification.NotificationSource;
 import com.yahoo.vespa.hosted.controller.persistence.BufferedLogStore;
 import com.yahoo.vespa.hosted.controller.persistence.CuratorDb;
+import com.yahoo.vespa.hosted.controller.versions.MajorVersionStatus;
 import com.yahoo.vespa.hosted.controller.versions.VersionStatus;
 import com.yahoo.vespa.hosted.controller.versions.VespaVersion;
 import com.yahoo.vespa.hosted.controller.versions.VespaVersion.Confidence;
@@ -48,6 +49,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
@@ -67,6 +69,7 @@ import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.yahoo.collections.Iterables.reversed;
@@ -89,6 +92,7 @@ import static java.util.function.Predicate.not;
 import static java.util.logging.Level.INFO;
 import static java.util.logging.Level.WARNING;
 import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Collectors.toUnmodifiableList;
 
 /**
@@ -446,6 +450,7 @@ public class JobController {
                                     versionStatus,
                                     systemVersion,
                                     instance -> controller.applications().versionCompatibility(application.id().instance(instance)),
+                                    version -> controller.applications().majorVersionStatus(version),
                                     controller.clock().instant());
     }
 
@@ -720,7 +725,7 @@ public class JobController {
 
         controller.applications().lockApplicationOrThrow(TenantAndApplicationId.from(id), application -> {
             controller.applications().applicationStore().putDev(deploymentId, version.id(), applicationPackage.zippedContent(), diff);
-            Version targetPlatform = platform.orElseGet(() -> findTargetPlatform(applicationPackage, deploymentId, application.get().get(id.instance())));
+            Version targetPlatform = findTargetPlatform(platform, applicationPackage, deploymentId, application.get());
             controller.applications().store(application.withRevisions(revisions -> revisions.with(version)));
             start(id,
                   type,
@@ -750,6 +755,20 @@ public class JobController {
                       .orElseGet(() -> ApplicationPackageDiff.diffAgainstEmpty(applicationPackage));
     }
 
+    private Version findTargetPlatform(Optional<Version> preferredPlatform, ApplicationPackage applicationPackage, DeploymentId id, Application application) {
+        Version targetPlatform = preferredPlatform.orElseGet(() -> findTargetPlatform(applicationPackage, id, application.get(id.applicationId().instance())));
+        Set<Version> deployedVersions = application.instances().values().stream()
+                                                   .flatMap(instance -> instance.deployments().values().stream())
+                                                   .map(Deployment::version)
+                                                   .collect(toSet());
+
+        if (     controller.applications().majorVersionStatus(targetPlatform).compareTo(MajorVersionStatus.LEGACY) >= 0
+            && ! deployedVersions.contains(targetPlatform))
+            throw new IllegalArgumentException("platform " + targetPlatform + " is no longer available");
+
+        return targetPlatform;
+    }
+
     private Version findTargetPlatform(ApplicationPackage applicationPackage, DeploymentId id, Optional<Instance> instance) {
         // Prefer previous platform if possible. Candidates are all deployable, ascending, with existing version appended; then reversed.
         VersionStatus versionStatus = controller.readVersionStatus();
@@ -757,7 +776,9 @@ public class JobController {
 
         List<Version> versions = new ArrayList<>(List.of(systemVersion));
         for (VespaVersion version : versionStatus.deployableVersions())
-            if (version.confidence().equalOrHigherThan(Confidence.low))
+            if (   version.confidence().equalOrHigherThan(Confidence.low)
+                && (   controller.applications().majorVersionStatus(version.versionNumber()) == MajorVersionStatus.STABLE)
+                    || applicationPackage.deploymentSpec().majorVersion().map(major -> major == version.versionNumber().getMajor()).orElse(false))
                 versions.add(version.versionNumber());
 
         instance.map(Instance::deployments)

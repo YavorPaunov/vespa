@@ -55,6 +55,7 @@ import com.yahoo.vespa.hosted.controller.security.TenantSpec;
 import com.yahoo.vespa.hosted.controller.tenant.AthenzTenant;
 import com.yahoo.vespa.hosted.controller.tenant.Tenant;
 import com.yahoo.vespa.hosted.controller.api.identifiers.ControllerVersion;
+import com.yahoo.vespa.hosted.controller.versions.MajorVersionStatus;
 import com.yahoo.vespa.hosted.controller.versions.VersionStatus;
 import com.yahoo.vespa.hosted.rotation.config.RotationsConfig;
 import com.yahoo.yolean.concurrent.Sleeper;
@@ -138,6 +139,7 @@ public final class ControllerTester {
         this.curator = curator;
         this.rotationsConfig = rotationsConfig;
         this.flagSource = flagSource.withBooleanFlag(PermanentFlags.ENABLE_PUBLIC_SIGNUP_FLOW.id(), true)
+                                    .withStringFlag(PermanentFlags.MAJOR_VERSION_STATUS.id(), "STABLE")
                                     .withListFlag(PermanentFlags.INCOMPATIBLE_VERSIONS.id(), List.of(), String.class);
         this.controller = controller;
 

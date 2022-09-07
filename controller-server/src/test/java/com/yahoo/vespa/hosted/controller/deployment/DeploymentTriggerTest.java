@@ -2257,13 +2257,16 @@ public class DeploymentTriggerTest {
         Version version0 = tester.controllerTester().controller().readSystemVersion();
         Version version1 = new Version("6.2");
         Version version2 = new Version("6.3");
-        assertEquals(version0, tester.newDeploymentContext("t", "a1", "default").submit().deploy().application().oldestDeployedPlatform().get());
+        DeploymentContext app1 = tester.newDeploymentContext("t", "a1", "default");
+        assertEquals(version0, app1.submit().deploy().application().oldestDeployedPlatform().get());
 
+        // New version with normal confidence is new default target.
         tester.controllerTester().upgradeSystem(version1);
         tester.upgrader().overrideConfidence(version1, Confidence.normal);
         tester.controllerTester().computeVersionStatus();
         assertEquals(version1, tester.newDeploymentContext("t", "a2", "default").submit().deploy().application().oldestDeployedPlatform().get());
 
+        // New version with broken confidence is not the default target, neither for prod nor for dev.
         tester.controllerTester().upgradeSystem(version2);
         tester.upgrader().overrideConfidence(version2, Confidence.broken);
         tester.controllerTester().computeVersionStatus();
@@ -2280,10 +2283,34 @@ public class DeploymentTriggerTest {
         }
         dev1.assertNotRunning(JobType.dev("us-east-1"));
 
+        // System version is used as a fallback when no STABLE major is found.
+        tester.controllerTester().flagSource().withStringFlag(PermanentFlags.MAJOR_VERSION_STATUS.id(), "CURRENT");
+
+        assertEquals(version2, tester.newDeploymentContext("t", "d3", "default").runJob(JobType.dev("us-east-1"), DeploymentContext.applicationPackage()).deployment(ZoneId.from("dev", "us-east-1")).version());
+        assertEquals(version2, tester.newDeploymentContext("t", "a4", "default").submit().deploy().application().oldestDeployedPlatform().get());
+
+        // Upgrader also won't upgrade to anything but STABLE.
+        assertEquals(Change.empty(), app1.instance().change());
+        tester.upgrader().run();
+        assertEquals(Change.empty(), app1.instance().change());
+
+        tester.controllerTester().flagSource().withStringFlag(PermanentFlags.MAJOR_VERSION_STATUS.id(), "OUTDATED");
+
+        assertEquals(version2, tester.newDeploymentContext("t", "d4", "default").runJob(JobType.dev("us-east-1"), DeploymentContext.applicationPackage()).deployment(ZoneId.from("dev", "us-east-1")).version());
+        assertEquals(version2, tester.newDeploymentContext("t", "a5", "default").submit().deploy().application().oldestDeployedPlatform().get());
+
+        // Upgrader also won't upgrade to anything but STABLE.
+        assertEquals(Change.empty(), app1.instance().change());
+        tester.upgrader().run();
+        assertEquals(Change.empty(), app1.instance().change());
+
+        tester.controllerTester().flagSource().withStringFlag(PermanentFlags.MAJOR_VERSION_STATUS.id(), "STABLE");
+
+        // With low confidence, the new version is default for dev deployments, but not for prod
         tester.controllerTester().upgradeSystem(version2);
         tester.upgrader().overrideConfidence(version2, Confidence.low);
         tester.controllerTester().computeVersionStatus();
-        assertEquals(version1, tester.newDeploymentContext("t", "a4", "default").submit().deploy().application().oldestDeployedPlatform().get());
+        assertEquals(version1, tester.newDeploymentContext("t", "a6", "default").submit().deploy().application().oldestDeployedPlatform().get());
         assertEquals(version1, dev1.runJob(JobType.dev("us-east-1"), DeploymentContext.applicationPackage()).deployment(ZoneId.from("dev", "us-east-1")).version());
         assertEquals(version2, dev2.runJob(JobType.dev("us-east-1"), DeploymentContext.applicationPackage()).deployment(ZoneId.from("dev", "us-east-1")).version());
 

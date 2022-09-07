@@ -10,6 +10,7 @@ import com.yahoo.vespa.hosted.controller.api.integration.deployment.JobType;
 import com.yahoo.vespa.hosted.controller.application.Deployment;
 import com.yahoo.vespa.hosted.controller.deployment.Run;
 import com.yahoo.vespa.hosted.controller.deployment.Versions;
+import com.yahoo.vespa.hosted.controller.versions.MajorVersionStatus;
 import com.yahoo.vespa.hosted.controller.versions.VespaVersion;
 import com.yahoo.yolean.Exceptions;
 
@@ -37,7 +38,8 @@ public class DeploymentUpgrader extends ControllerMaintainer {
 
         Version targetPlatform = null; // Upgrade to the newest non-broken, deployable version.
         for (VespaVersion platform : controller().readVersionStatus().deployableVersions())
-            if (platform.confidence().equalOrHigherThan(VespaVersion.Confidence.low))
+            if (    platform.confidence().equalOrHigherThan(VespaVersion.Confidence.low)
+                 && controller().applications().majorVersionStatus(platform.versionNumber()) == MajorVersionStatus.STABLE)
                 targetPlatform = platform.versionNumber();
 
         if (targetPlatform == null)

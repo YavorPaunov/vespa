@@ -11,6 +11,7 @@ import com.yahoo.vespa.hosted.controller.Application;
 import com.yahoo.vespa.hosted.controller.Instance;
 import com.yahoo.vespa.hosted.controller.deployment.DeploymentStatus;
 import com.yahoo.vespa.hosted.controller.deployment.DeploymentStatusList;
+import com.yahoo.vespa.hosted.controller.versions.MajorVersionStatus;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -52,17 +53,21 @@ public class InstanceList extends AbstractFilteringList<ApplicationId, InstanceL
     }
 
     /**
-     * Returns the subset of instances whose application have a deployment on the given major, or specify it in deployment spec.
+     * Returns the subset of instances whose application have a deployment on the given major, or specify it in deployment spec;
+     * or where at least one deployment is on a LEGACY major version, which is not also specified in deployment spec.
      *
      * @param targetMajorVersion the target major version which applications returned allows upgrading to
      */
-    public InstanceList allowingMajorVersion(int targetMajorVersion) {
+    public InstanceList allowingMajorVersion(int targetMajorVersion, Function<Version, MajorVersionStatus> majorVersionStatus) {
         return matching(id -> {
             Application application = application(id);
-            return application.deploymentSpec().majorVersion().map(allowed -> targetMajorVersion <= allowed)
-                              .orElseGet(() -> application.productionDeployments().values().stream()
-                                                          .flatMap(List::stream)
-                                                          .anyMatch(deployment -> targetMajorVersion <= deployment.version().getMajor()));
+            if (application.deploymentSpec().majorVersion().isPresent())
+                return application.deploymentSpec().majorVersion().get() >= targetMajorVersion;
+
+            return application.productionDeployments().values().stream()
+                              .flatMap(List::stream)
+                              .anyMatch(deployment ->    targetMajorVersion <= deployment.version().getMajor()
+                                                      || majorVersionStatus.apply(deployment.version()) == MajorVersionStatus.LEGACY);
         });
     }
 

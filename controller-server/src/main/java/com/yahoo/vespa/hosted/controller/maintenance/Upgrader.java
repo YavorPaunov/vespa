@@ -105,7 +105,8 @@ public class Upgrader extends ControllerMaintainer {
                                                                                                    .not().upgradingTo(targetAndNewer);
 
         Map<ApplicationId, Version> targets = new LinkedHashMap<>();
-        for (Version version : DeploymentStatus.targetsForPolicy(versionStatus, controller().systemVersion(versionStatus), policy)) {
+        for (Version version : DeploymentStatus.targetsForPolicy(versionStatus, controller().systemVersion(versionStatus), policy,
+                                                                 controller().applications()::majorVersionStatus)) {
             targetAndNewer.add(version);
             InstanceList eligible = eligibleForVersion(remaining, version);
             InstanceList outdated = cancellationCriterion.apply(eligible);
@@ -137,7 +138,7 @@ public class Upgrader extends ControllerMaintainer {
     private InstanceList eligibleForVersion(InstanceList instances, Version version) {
         Change change = Change.of(version);
         return instances.not().failingOn(version)
-                        .allowingMajorVersion(version.getMajor())
+                        .allowingMajorVersion(version.getMajor(), controller().applications()::majorVersionStatus)
                         .compatibleWithPlatform(version, controller().applications()::versionCompatibility)
                         .not().hasCompleted(change) // Avoid rescheduling change for instances without production steps.
                         .onLowerVersionThan(version)
